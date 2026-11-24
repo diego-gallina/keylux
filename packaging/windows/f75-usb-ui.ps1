@@ -179,13 +179,28 @@ $profilePath = Join-Path (Join-Path ([Environment]::GetFolderPath('LocalApplicat
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Keylux | AULA F75'
 $form.StartPosition = 'CenterScreen'
-$form.ClientSize = [System.Drawing.Size]::new(560, 648)
 $form.FormBorderStyle = 'FixedDialog'
 $form.MaximizeBox = $false
 $form.AutoScroll = $true
-$form.AutoScaleMode = 'Font'
 $form.Font = [System.Drawing.Font]::new('Segoe UI', 10)
-$form.BackColor = [System.Drawing.Color]::FromArgb(245, 248, 251)
+$form.AutoScaleMode = 'Font'
+$form.ClientSize = [System.Drawing.Size]::new(664, 600)
+$highContrast = [System.Windows.Forms.SystemInformation]::HighContrast
+$theme = @{
+    Bg = [System.Drawing.Color]::FromArgb(16, 18, 22)
+    Surface = [System.Drawing.Color]::FromArgb(26, 30, 36)
+    Ink = [System.Drawing.Color]::FromArgb(239, 242, 246)
+    Sub = [System.Drawing.Color]::FromArgb(172, 185, 198)
+    Border = [System.Drawing.Color]::FromArgb(70, 83, 96)
+    Hover = [System.Drawing.Color]::FromArgb(42, 51, 60)
+    Accent = [System.Drawing.Color]::FromArgb(112, 233, 226)
+    AccentHover = [System.Drawing.Color]::FromArgb(164, 248, 241)
+    AccentInk = [System.Drawing.Color]::FromArgb(10, 33, 38)
+}
+if (-not $highContrast) {
+    $form.BackColor = $theme.Bg
+    $form.ForeColor = $theme.Ink
+}
 $tip = New-Object System.Windows.Forms.ToolTip
 
 function Add-Control {
@@ -193,42 +208,61 @@ function Add-Control {
     $ctrl = New-Object "System.Windows.Forms.$Type"
     $ctrl.Text = $Text
     $ctrl.SetBounds($X, $Y, $W, $H)
+    if (-not $highContrast) {
+        $ctrl.ForeColor = $theme.Ink
+        switch ($Type) {
+            'Button' {
+                $ctrl.FlatStyle = 'Flat'
+                $ctrl.UseVisualStyleBackColor = $false
+                $ctrl.BackColor = $theme.Surface
+                $ctrl.FlatAppearance.BorderColor = $theme.Border
+                $ctrl.FlatAppearance.MouseOverBackColor = $theme.Hover
+                $ctrl.FlatAppearance.MouseDownBackColor = $theme.Bg
+            }
+            'Label' { $ctrl.ForeColor = $theme.Sub }
+            'TextBox' { $ctrl.BackColor = $theme.Surface; $ctrl.BorderStyle = 'FixedSingle' }
+            'ComboBox' { $ctrl.BackColor = $theme.Surface; $ctrl.FlatStyle = 'Flat' }
+            'NumericUpDown' { $ctrl.BackColor = $theme.Surface; $ctrl.BorderStyle = 'FixedSingle' }
+        }
+    }
     $form.Controls.Add($ctrl)
     return $ctrl
 }
 
-$title = Add-Control Label 'Luz do AULA F75' 24 20 510 39
-$title.Font = [System.Drawing.Font]::new('Segoe UI Semibold', 22)
-$usbLabel = Add-Control Label 'USB-C em modo com fio. Clique em Verificar USB.' 25 66 515 25
-[void](Add-Control Label 'Perfil local' 25 104 140 23)
-$profileName = Add-Control ComboBox '' 25 130 300 28
-$profileName.AccessibleName = 'Nome do perfil'
+$title = Add-Control Label 'Luz do F75' 23 15 400 52
+$title.Font = [System.Drawing.Font]::new('Segoe UI', 28, [System.Drawing.FontStyle]::Bold)
+if (-not $highContrast) { $title.ForeColor = $theme.Ink }
+$usbLabel = Add-Control Label 'USB-C • modo com fio' 26 72 420 25
+$profileName = Add-Control ComboBox '' 25 514 335 28
+$profileName.AccessibleName = 'Nome do perfil local'
 $profileName.DropDownStyle = 'DropDown'
 $profileName.MaxLength = 30
-$openProfile = Add-Control Button 'Carregar' 335 128 90 32
-$saveProfile = Add-Control Button 'Salvar' 434 128 101 32
+$openProfile = Add-Control Button 'Carregar' 369 511 123 33
+$saveProfile = Add-Control Button 'Salvar perfil' 501 511 138 33
 $tip.SetToolTip($profileName, 'Escolha um perfil ou digite um nome novo.')
 $tip.SetToolTip($saveProfile, 'Salva só neste Windows. Para usar a cor, clique em Aplicar.')
-[void](Add-Control Label 'Cor' 25 183 90 24)
-$color = Add-Control Button '' 25 208 154 33
+$color = Add-Control Button '' 25 292 165 37
 $color.AccessibleName = 'Escolher cor'
-$color.FlatStyle = 'Flat'
-$color.UseVisualStyleBackColor = $false
+if (-not $highContrast) { $color.FlatAppearance.MouseOverBackColor = $theme.Hover }
 $tip.SetToolTip($color, 'Abre a paleta de cores')
 $presets = @{
-    Cyan = Add-Control Button 'Ciano' 189 208 76 33
-    Warm = Add-Control Button 'Quente' 271 208 76 33
-    Violet = Add-Control Button 'Roxo' 353 208 76 33
-    White = Add-Control Button 'Branco' 435 208 76 33
+    Cyan = Add-Control Button 'Ciano' 200 292 102 37
+    Warm = Add-Control Button 'Quente' 312 292 102 37
+    Violet = Add-Control Button 'Roxo' 424 292 102 37
+    White = Add-Control Button 'Branco' 536 292 103 37
 }
 function Set-SelectedColor {
     param([string]$Hex)
     $script:hex = $Hex.ToUpperInvariant()
     $rgb = [System.Drawing.ColorTranslator]::FromHtml('#' + $script:hex)
-    $color.BackColor = $rgb
+    if (-not $highContrast) {
+        $color.BackColor = $rgb
+        $color.FlatAppearance.MouseOverBackColor = $rgb
+        $color.FlatAppearance.MouseDownBackColor = $rgb
+    }
     $luma = 0.2126 * $rgb.R + 0.7152 * $rgb.G + 0.0722 * $rgb.B
-    $color.ForeColor = if ($luma -ge 135) { [System.Drawing.Color]::Black } else { [System.Drawing.Color]::White }
-    $color.Text = '#' + $script:hex + '   Alterar'
+    if (-not $highContrast) { $color.ForeColor = if ($luma -ge 135) { [System.Drawing.Color]::Black } else { [System.Drawing.Color]::White } }
+    $color.Text = 'Cor  #' + $script:hex
     Update-ColorPreview
 }
 $presets.Cyan.Add_Click({ Set-SelectedColor '00FFFF' })
@@ -246,16 +280,15 @@ $color.Add_Click({
     } finally { $dialog.Dispose() }
 })
 
-$brightnessLabel = Add-Control Label 'Brilho: 35%' 25 365 240 24
-$brightness = Add-Control TrackBar '' 20 389 506 42
+$brightnessLabel = Add-Control Label 'Brilho: 35%' 25 349 300 24
+$brightness = Add-Control TrackBar '' 20 375 332 43
 $brightness.AccessibleName = 'Brilho de 0 a 100 por cento'
 $brightness.Maximum = 100
 $brightness.TickFrequency = 10
 $brightness.Value = 35
-[void](Add-Control Label 'Prévia no brilho escolhido' 25 251 492 22)
-$preview = Add-Control Panel '' 25 278 510 78
+$preview = Add-Control Panel '' 25 105 614 172
 $preview.AccessibleName = 'Prévia aproximada de toda a iluminação do teclado'
-$preview.BackColor = [System.Drawing.Color]::FromArgb(26, 31, 40)
+$preview.BackColor = if ($highContrast) { [System.Drawing.SystemColors]::Window } else { $theme.Surface }
 $script:previewColor = [System.Drawing.Color]::Teal
 # Approximate 75% layout; artwork not copied from the vendor.
 $keyRows = @(
@@ -269,13 +302,14 @@ $keyRows = @(
 $preview.Add_Paint({
     param($sender, $eventArgs)
     $brush = [System.Drawing.SolidBrush]::new($script:previewColor)
-    $rim = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(104, 115, 131))
+    $rimColor = if ($highContrast) { [System.Drawing.SystemColors]::WindowText } else { $theme.Border }
+    $rim = [System.Drawing.Pen]::new($rimColor)
     try {
-        $keyUnit = ($sender.ClientSize.Width - 22) / 16.6
-        $rowPitch = ($sender.ClientSize.Height - 15) / $keyRows.Count
-        $y = 7.0
+        $keyUnit = ($sender.ClientSize.Width - 44) / 16.6
+        $rowPitch = ($sender.ClientSize.Height - 32) / $keyRows.Count
+        $y = 15.0
         foreach ($row in $keyRows) {
-            $x = 10.0
+            $x = 22.0
             foreach ($width in $row) {
                 $step = [Math]::Abs([double]$width) * $keyUnit
                 if ($width -gt 0) {
@@ -307,29 +341,40 @@ $brightness.Add_ValueChanged({
 })
 Set-SelectedColor $script:hex
 
-[void](Add-Control Label 'Segundos' 25 451 86 23)
-$seconds = Add-Control NumericUpDown '' 112 449 85 28
+[void](Add-Control Label 'Segundos' 383 350 86 23)
+$seconds = Add-Control NumericUpDown '' 477 346 162 28
 $seconds.AccessibleName = 'Duração em segundos'
 $seconds.Minimum = 1
 $seconds.Maximum = 3600
 $seconds.Value = 10
-$continuous = Add-Control CheckBox 'Até eu parar' 224 448 166 28
+$continuous = Add-Control CheckBox 'Até eu parar' 383 379 220 32
 $continuous.Add_CheckedChanged({ $seconds.Enabled = -not $continuous.Checked })
 
-$start = Add-Control Button 'Aplicar' 25 492 116 37
-$stop = Add-Control Button 'Parar' 149 492 91 37
-$off = Add-Control Button 'Apagar' 248 492 91 37
-$check = Add-Control Button 'Verificar USB' 347 492 105 37
-$diagnose = Add-Control Button 'Detalhes' 460 492 75 37
+$start = Add-Control Button '&Aplicar' 25 427 280 44
+$stop = Add-Control Button '&Parar' 315 427 154 44
+$off = Add-Control Button 'Apa&gar' 479 427 160 44
+$check = Add-Control Button 'Verificar USB' 451 60 118 32
+$diagnose = Add-Control Button 'Detalhes' 577 60 62 32
+$check.Font = [System.Drawing.Font]::new('Segoe UI', 9)
+$diagnose.Font = [System.Drawing.Font]::new('Segoe UI', 8)
+$start.Font = [System.Drawing.Font]::new('Segoe UI', 13, [System.Drawing.FontStyle]::Bold)
+if (-not $highContrast) {
+    $start.BackColor = $theme.Accent
+    $start.ForeColor = $theme.AccentInk
+    $start.FlatAppearance.BorderSize = 0
+    $start.FlatAppearance.MouseOverBackColor = $theme.AccentHover
+    $start.FlatAppearance.MouseDownBackColor = $theme.AccentHover
+}
 $stop.Enabled = $false
+[void](Add-Control Label 'Perfis neste PC' 25 485 200 23)
 $tip.SetToolTip($stop, 'Para o envio. Para apagar o último quadro, use Apagar.')
 $tip.SetToolTip($diagnose, 'Mostra as etapas da identificação USB, sem enviar uma cor.')
-$status = Add-Control TextBox '' 25 542 510 80
+$status = Add-Control TextBox '' 25 554 614 34
 $status.AccessibleName = 'Resultado do controlador'
 $status.Multiline = $true
 $status.ReadOnly = $true
 $status.ScrollBars = 'Vertical'
-$status.Text = 'Escolha a cor e clique em Aplicar. Parar interrompe o envio, sem apagar a última cor.'
+$status.Text = 'Pronto para aplicar ciano por 10 s.'
 
 function Refresh-ProfileList {
     param([string]$Selection)
@@ -394,7 +439,8 @@ function Start-ControllerAction {
             Action=$Action; Stopped=$false
         }
         Set-Running $true
-        $status.Text = if ($Action -eq 'Hold') { 'Aplicando após verificar o F75. Se precisar, clique em Parar.' } else { 'Aguarde…' }
+        $status.Height = 34
+        $status.Text = if ($Action -eq 'Hold') { 'Aplicando…' } else { 'Aguarde…' }
     } catch {
         if ($null -ne $p -and $null -eq $script:job) {
             try { if ($started -and -not $p.HasExited) { $p.Kill() } } finally { $p.Dispose() }
@@ -428,12 +474,13 @@ $timer.Add_Tick({
         if ($job.Action -eq 'Check' -and -not $job.Stopped) {
             $usbLabel.Text = if ($job.Process.ExitCode -eq 0) { 'Última verificação: F75 confirmado pelo USB-C.' } else { 'Última verificação: F75 não confirmado.' }
         }
+        $status.Height = if ($job.Action -eq 'Diagnose' -or $job.Process.ExitCode -ne 0) { 88 } else { 34 }
         $status.Text = if ($job.Stopped) {
             'Envio interrompido. Use Apagar se quiser apagar a última cor.'
         } elseif ($job.Process.ExitCode -ne 0) {
             'O comando falhou. Confira o cabo e feche outros apps de RGB.' + [Environment]::NewLine + $errorText
         } elseif ($job.Action -eq 'Hold') {
-            'Envio concluído. Confira a cor no teclado; para apagar, clique em Apagar.'
+            'Envio concluído. Use Apagar para desligar a luz.'
         } elseif ($job.Action -eq 'Off') {
             'Comando para apagar enviado. Confira o teclado.'
         } else {
@@ -461,6 +508,14 @@ $form.Add_FormClosing({
         $status.Text = 'O envio ainda está parando. Aguarde e tente fechar novamente.'
     }
 })
+# Visual order and Tab navigation both put the core lighting controls first.
+$tabControls = @($color, $presets.Cyan, $presets.Warm, $presets.Violet, $presets.White,
+    $brightness, $seconds, $continuous, $start, $stop, $off, $profileName,
+    $openProfile, $saveProfile, $check, $diagnose, $status)
+for ($index = 0; $index -lt $tabControls.Count; $index++) {
+    $tabControls[$index].TabIndex = $index
+}
+$form.ActiveControl = $start
 try {
     $timer.Start()
     [void]$form.ShowDialog()
