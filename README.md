@@ -2,6 +2,12 @@
 
 Controle de luz para o AULA F75 no Windows, sem instalar driver extra nem trocar firmware. Este fork usa o modo USB-C do [Keylux, de Sibte Hussain](https://github.com/SibteProf/keylux). O modo simples aceita só o F75 `258A:010C`, depois de confirmar que o teclado respondeu.
 
+## Abrir no Windows
+
+Extraia o ZIP inteiro e abra **Abrir Keylux.cmd**. Com o F75 no USB-C e a chave em modo com fio, clique em **Verificar USB**. A janela já abre pronta para ciano, 35%, 10 segundos. Escolha a cor na paleta, veja a prévia do teclado e clique em **Aplicar**.
+
+**Salvar** guarda um perfil só no Windows; **Carregar** não envia nada ao teclado. **Parar** encerra o envio e **Apagar** manda um quadro preto. Não há macros, gravação no teclado, firmware ou inicialização automática na janela. Se o Windows bloquear o script, não desative a proteção: use o executável pelo terminal.
+
 ## Testar ciano por 10 segundos
 
 Conecte em modo com fio. Na pasta do executável, rode no PowerShell:
