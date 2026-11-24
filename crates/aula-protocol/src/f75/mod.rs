@@ -35,6 +35,7 @@ pub struct F75 {
     /// but nothing has confirmed: streaming to it is volatile and harmless,
     /// where a config write is neither.
     allow_config_write: bool,
+    confirmed: bool,
 }
 
 /// The gap to use for a requested frame rate on a link.
@@ -157,6 +158,7 @@ impl F75 {
             name: format!("{MODEL} ({})", c.link.suffix()),
             // A board that returned a valid config block has proven what it is.
             allow_config_write: c.confidence == Confidence::Known || c.confirmed,
+            confirmed: c.confirmed,
         })
     }
 
@@ -317,6 +319,30 @@ impl F75 {
         buf
     }
 
+    /// Refresh a volatile RGB frame without suppressing unchanged colors.
+    /// Wired F75 only; never writes firmware, mode, or a stored color table.
+    pub fn refresh_wired_volatile(&mut self, frame: &Frame) -> Result<()> {
+        if self.id != p::WIRED || self.link != Link::Wired || !self.confirmed {
+            return Err(Error::UnsupportedHardware(
+                "Volatile refresh requires a verified USB-C AULA F75 (258a:010c).",
+            ));
+        }
+        self.send_stream_frame(frame)
+    }
+
+    fn send_stream_frame(&mut self, frame: &Frame) -> Result<()> {
+        self.respect_gap();
+        let payload = self.encode_stream(frame);
+        self.io.send(&p::build_packet(
+            p::cmd::STREAM,
+            p::ADDR,
+            p::STREAM_LEN as u16,
+            Some(&payload),
+        ))?;
+        self.last_frame = Some(frame.clone());
+        Ok(())
+    }
+
     /// Read the key matrix table (command 0x83).
     ///
     /// This is how the LED ordering was derived; kept so a future device can be
@@ -386,16 +412,7 @@ impl RgbDevice for F75 {
             return Ok(());
         }
 
-        self.respect_gap();
-        let payload = self.encode_stream(frame);
-        self.io.send(&p::build_packet(
-            p::cmd::STREAM,
-            p::ADDR,
-            p::STREAM_LEN as u16,
-            Some(&payload),
-        ))?;
-        self.last_frame = Some(frame.clone());
-        Ok(())
+        self.send_stream_frame(frame)
     }
 
     fn set_max_fps(&mut self, fps: u32) {

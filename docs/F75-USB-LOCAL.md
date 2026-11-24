@@ -17,8 +17,11 @@ cargo build --release --locked -p aula-protocol --example f75_usb
 ```
 
 Outros exemplos: `preview "#8245ED" 65`, `apply focus 40`, `apply off`.
-O comando sem argumentos mostra ajuda. Somente `apply` é capaz de enviar uma
-cor, em um único quadro temporário. O efeito nativo pode repintar o teclado ou
+O comando sem argumentos mostra ajuda. `apply` envia uma cor em um único quadro temporário.
+`hold 00FFFF 35 10` reaplica ciano por 10 segundos a no máximo 5 quadros/s.
+Sem a duração, use Ctrl+C para parar. O programa abre um único dispositivo,
+revalida a resposta no mesmo handle e encerra no primeiro erro, sem reconectar.
+Parar apenas interrompe o envio: o último quadro pode continuar visível. O efeito nativo pode repintar o teclado ou
 não aceitar a cor até que o modo adequado seja selecionado nele. O programa
 não força esse modo nem salva configuração no teclado. Para voltar ao efeito
 nativo, use `Fn + \` no F75.

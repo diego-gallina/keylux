@@ -2,26 +2,19 @@
 
 Controle de luz para o AULA F75 no Windows, sem instalar driver extra nem trocar firmware. Este fork usa o modo USB-C do [Keylux, de Sibte Hussain](https://github.com/SibteProf/keylux). O modo simples aceita só o F75 `258A:010C`, depois de confirmar que o teclado respondeu.
 
-## Ciano por 10 segundos
+## Testar ciano por 10 segundos
 
-Conecte o teclado no cabo e coloque a chave no modo com fio. No PowerShell, na pasta do executável:
+Conecte em modo com fio. Na pasta do executável, rode no PowerShell:
 
 ```powershell
-.\f75-usb-c-hidapi.exe check
-if ($LASTEXITCODE -eq 0) {
-    .\f75-usb-c-hidapi.exe apply 00FFFF
-    if ($LASTEXITCODE -eq 0) {
-        Start-Sleep -Seconds 10
-        .\f75-usb-c-hidapi.exe apply off
-    }
-}
+.\f75-usb-c-hidapi.exe hold 00FFFF 35 10
 ```
 
-Isso manda ciano e apaga depois. Não restaura a cor anterior. Use `Fn + \` para voltar aos efeitos do teclado. O efeito nativo pode repintar a luz antes dos 10 segundos.
+O comando verifica o teclado e mantém o envio por 10 segundos. Sem o último número, continua até **Ctrl+C**. Parar o envio não apaga nem restaura a cor anterior. Para apagar, use `apply off`; para voltar aos efeitos do teclado, use `Fn + \`. Se a cor não aparecer, o efeito nativo pode estar passando por cima. Não precisa mexer no firmware para testar.
 
 ## Reaplicar a cor no Windows
 
-Deixe o [script](packaging/windows/f75-usb-watch.ps1) junto do executável em uma pasta fixa. O exemplo usa ciano com brilho de 35%. Teste na janela primeiro:
+Deixe o [script](packaging/windows/f75-usb-watch.ps1) junto do executável em uma pasta fixa. O exemplo usa ciano com brilho de 35%. O monitor manda só um quadro por conexão; se a cor não ficar visível, teste `hold` antes de ativar no login.
 
 ```powershell
 .\f75-usb-watch.ps1 -Action Watch -Color 00FFFF -Brightness 35

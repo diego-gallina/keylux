@@ -9,7 +9,7 @@ param(
     [int]$Brightness = 35,
     [string]$ExePath = (Join-Path $PSScriptRoot 'f75-usb-c-hidapi.exe'),
     [ValidatePattern('^[0-9A-Fa-f]{64}\z')]
-    [string]$ExeSha256 = '598c4a9873878b74bf13c324487b74b0ad05af29bbdf371bd6356c8f462a0280'
+    [string]$ExeSha256 = '2cbb346c2e1491ef33755c12186a0e7869027a651eb9bb2c59ba475f77a84129'
 )
 
 Set-StrictMode -Version Latest

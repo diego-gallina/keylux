@@ -6,13 +6,21 @@ use aula_protocol::{
     f75::protocol::WIRED, transport::ProbeResult, ChannelOrder, Confidence, DeviceCandidate, Frame,
     Link, Rgb, RgbDevice, ScanOptions, F75,
 };
-use std::process::ExitCode;
+use std::{
+    process::ExitCode,
+    thread,
+    time::{Duration, Instant},
+};
+
+const HOLD_INTERVAL: Duration = Duration::from_millis(200);
 
 const HELP: &str = "F75 USB-C (258a:010c)\n\
     f75_usb check\n\
     f75_usb diagnose\n\
     f75_usb preview <RRGGBB|warm|focus|off> [brightness 0-100]\n\
     f75_usb apply <RRGGBB|warm|focus|off> [brightness 0-100]\n\
+    f75_usb hold <RRGGBB|warm|focus|off> <brightness 0-100> [seconds 1-3600]\n\
+    Ctrl+C to stop a hold without duration; last sent color is not restored.\n\
     preview never touches hardware; apply sends one volatile RGB frame.\n\
     No installation, network, or firmware update during use.";
 
@@ -23,6 +31,7 @@ enum Action {
     Diagnose,
     Preview([u8; 3]),
     Apply([u8; 3]),
+    Hold([u8; 3], Option<Duration>),
 }
 
 fn parse(args: &[String]) -> Result<Action, &'static str> {
@@ -37,7 +46,19 @@ fn parse(args: &[String]) -> Result<Action, &'static str> {
         [command @ ("apply" | "preview"), color, brightness] => {
             parse_color(color, brightness).map(|rgb| color_action(command, rgb))
         }
-        _ => Err("Expected check, diagnose, preview <color> [brightness], or apply <color> [brightness]."),
+        ["hold", color, brightness] => {
+            parse_color(color, brightness).map(|rgb| Action::Hold(rgb, None))
+        }
+        ["hold", color, brightness, seconds] => {
+            let seconds = seconds
+                .parse::<u64>()
+                .ok()
+                .filter(|s| (1..=3600).contains(s))
+                .ok_or("Hold duration must be an integer from 1 to 3600 seconds.")?;
+            parse_color(color, brightness)
+                .map(|rgb| Action::Hold(rgb, Some(Duration::from_secs(seconds))))
+        }
+        _ => Err("Expected check, diagnose, preview, apply, or hold. Try --help."),
     }
 }
 
@@ -140,11 +161,59 @@ fn apply_one(device: &mut impl RgbDevice, rgb: [u8; 3]) -> anyhow::Result<()> {
     Ok(())
 }
 
+// Start one frame immediately, then sleep between sends. Check the deadline
+// again before each send so a scheduled wake can never add an extra frame.
+fn hold_loop(
+    duration: Option<Duration>,
+    elapsed: impl Fn() -> Duration,
+    mut sleep: impl FnMut(Duration),
+    mut send: impl FnMut() -> anyhow::Result<()>,
+) -> anyhow::Result<()> {
+    loop {
+        if duration.is_some_and(|max| elapsed() >= max) {
+            return Ok(());
+        }
+        send()?;
+        let wait = match duration {
+            Some(max) => HOLD_INTERVAL.min(max.saturating_sub(elapsed())),
+            None => HOLD_INTERVAL,
+        };
+        if wait.is_zero() {
+            return Ok(());
+        }
+        sleep(wait);
+    }
+}
+
+fn hold_color(rgb: [u8; 3], duration: Option<Duration>) -> anyhow::Result<()> {
+    // One confirmed path and one opened control handle, never auto-reopened.
+    let mut device = find_wired()?;
+    device.read_config()?; // Re-confirm signature on this exact open handle.
+    let [r, g, b] = rgb;
+    let frame = Frame::solid(device.led_count(), Rgb::new(r, g, b));
+    println!(
+        "Sending temporary color at up to 5 frames/s. Ctrl+C stops; no stored settings change."
+    );
+    let start = Instant::now();
+    hold_loop(
+        duration,
+        || start.elapsed(),
+        thread::sleep,
+        || {
+            device.refresh_wired_volatile(&frame)?;
+            Ok(())
+        },
+    )?;
+    println!("Finished sending frames. Use apply off or Fn+backslash for another effect.");
+    Ok(())
+}
+
 fn run(
     args: &[String],
     check: impl FnOnce() -> anyhow::Result<()>,
     diagnose: impl FnOnce() -> anyhow::Result<()>,
     apply: impl FnOnce([u8; 3]) -> anyhow::Result<()>,
+    hold: impl FnOnce([u8; 3], Option<Duration>) -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
     match parse(args).map_err(anyhow::Error::msg)? {
         Action::Help => println!("{HELP}"),
@@ -152,6 +221,7 @@ fn run(
         Action::Diagnose => diagnose()?,
         Action::Preview([r, g, b]) => println!("#{r:02X}{g:02X}{b:02X} (preview only)"),
         Action::Apply(rgb) => apply(rgb)?,
+        Action::Hold(rgb, duration) => hold(rgb, duration)?,
     }
     Ok(())
 }
@@ -179,6 +249,7 @@ fn main() -> ExitCode {
             println!("One temporary frame sent. If the current effect repaints it, no settings will be forced.");
             Ok(())
         },
+        hold_color,
     ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
@@ -212,6 +283,7 @@ mod tests {
                 || panic!("hardware accessed"),
                 || panic!("hardware accessed"),
                 |_| panic!("hardware accessed"),
+                |_, _| panic!("hardware accessed"),
             );
             assert_eq!(result.is_ok(), words.first() != Some(&"apply"));
         }
@@ -258,6 +330,7 @@ mod tests {
             || panic!("wrong action"),
             || panic!("wrong action"),
             |rgb| apply_one(&mut fake, rgb),
+            |_, _| panic!("wrong action"),
         )
         .unwrap();
         assert_eq!(fake.sent, vec![Frame::solid(126, Rgb::new(128, 64, 1))]);
@@ -270,6 +343,7 @@ mod tests {
             || Ok(()),
             || panic!("wrong action"),
             |_| panic!("check sent lighting"),
+            |_, _| panic!("check streamed lighting"),
         )
         .unwrap();
     }
@@ -285,8 +359,71 @@ mod tests {
                 Ok(())
             },
             |_| panic!("diagnose sent lighting"),
+            |_, _| panic!("diagnose streamed lighting"),
         )
         .unwrap();
         assert!(called.get());
+    }
+
+    #[test]
+    fn timed_hold_stops_at_deadline_without_an_extra_frame() {
+        use std::cell::{Cell, RefCell};
+        let time = Cell::new(Duration::ZERO);
+        let sends = RefCell::new(Vec::new());
+        run(
+            &args(&["hold", "00FFFF", "35", "10"]),
+            || panic!("wrong path"),
+            || panic!("wrong path"),
+            |_| panic!("wrong path"),
+            |rgb, duration| {
+                assert_eq!(rgb, [0, 89, 89]);
+                hold_loop(
+                    duration,
+                    || time.get(),
+                    |gap| time.set(time.get() + gap),
+                    || {
+                        sends.borrow_mut().push(time.get());
+                        Ok(())
+                    },
+                )
+            },
+        )
+        .unwrap();
+        let sends = sends.into_inner();
+        assert_eq!(sends.len(), 50);
+        assert_eq!(sends[0], Duration::ZERO);
+        assert_eq!(sends[49], Duration::from_millis(9800));
+        assert_eq!(time.get(), Duration::from_secs(10));
+        assert!(sends
+            .windows(2)
+            .all(|pair| pair[1] - pair[0] >= HOLD_INTERVAL));
+    }
+
+    #[test]
+    fn hold_fails_closed_on_write_error_or_invalid_input() {
+        for words in [
+            ["hold", "00FFFF", "35", "0"],
+            ["hold", "00FFFF", "35", "3601"],
+            ["hold", "00FFFF", "101", "10"],
+            ["hold", "wrong", "35", "10"],
+        ] {
+            assert!(parse(&args(&words)).is_err());
+        }
+        assert_eq!(
+            parse(&args(&["hold", "00FFFF", "35"])).unwrap(),
+            Action::Hold([0, 89, 89], None)
+        );
+        let mut writes = 0;
+        let result = hold_loop(
+            None,
+            || Duration::ZERO,
+            |_| panic!("would retry"),
+            || {
+                writes += 1;
+                anyhow::bail!("USB disconnected")
+            },
+        );
+        assert_eq!(writes, 1);
+        assert_eq!(result.unwrap_err().to_string(), "USB disconnected");
     }
 }
