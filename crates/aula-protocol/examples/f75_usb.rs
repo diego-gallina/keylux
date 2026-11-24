@@ -10,6 +10,7 @@ use std::process::ExitCode;
 
 const HELP: &str = "F75 USB-C (258a:010c)\n\
     f75_usb check\n\
+    f75_usb diagnose\n\
     f75_usb preview <RRGGBB|warm|focus|off> [brightness 0-100]\n\
     f75_usb apply <RRGGBB|warm|focus|off> [brightness 0-100]\n\
     preview never touches hardware; apply sends one volatile RGB frame.\n\
@@ -19,6 +20,7 @@ const HELP: &str = "F75 USB-C (258a:010c)\n\
 enum Action {
     Help,
     Check,
+    Diagnose,
     Preview([u8; 3]),
     Apply([u8; 3]),
 }
@@ -28,13 +30,14 @@ fn parse(args: &[String]) -> Result<Action, &'static str> {
     match args.as_slice() {
         [] | ["help" | "--help" | "-h"] => Ok(Action::Help),
         ["check"] => Ok(Action::Check),
+        ["diagnose"] => Ok(Action::Diagnose),
         [command @ ("apply" | "preview"), color] => {
             parse_color(color, "100").map(|rgb| color_action(command, rgb))
         }
         [command @ ("apply" | "preview"), color, brightness] => {
             parse_color(color, brightness).map(|rgb| color_action(command, rgb))
         }
-        _ => Err("Expected check, preview <color> [brightness], or apply <color> [brightness]."),
+        _ => Err("Expected check, diagnose, preview <color> [brightness], or apply <color> [brightness]."),
     }
 }
 
@@ -95,6 +98,39 @@ fn find_wired() -> anyhow::Result<F75> {
     Ok(F75::open_candidate(&candidate, ChannelOrder::Rgb)?)
 }
 
+/// Report only per-collection metadata and read probe outcomes. The upstream
+/// probe issues the fixed config READ command; it does not change settings.
+fn diagnose() -> anyhow::Result<()> {
+    let cols = F75::probe(&ScanOptions::default())?;
+    let mut found = false;
+    for col in cols.into_iter().filter(|col| col.info.id == WIRED) {
+        found = true;
+        let status = match col.result {
+            ProbeResult::OsOwned => "not opened (OS-owned or outside the probe's vendor scope)",
+            ProbeResult::Unopenable(_) => "open failed (HID handle unavailable)",
+            ProbeResult::Silent => "open succeeded; initial RGB feature read failed",
+            ProbeResult::Answered { confirmed: false } => {
+                "initial feature read succeeded; config response not confirmed"
+            }
+            ProbeResult::Answered { confirmed: true } if col.info.is_vendor() => {
+                "config response confirmed; candidate for wired RGB"
+            }
+            ProbeResult::Answered { confirmed: true } => {
+                "config response confirmed; excluded because usage page is not vendor-defined"
+            }
+        };
+        println!(
+            "VID:PID 258A:010C | interface {} | usage {:04X}:{:04X} | {}",
+            col.info.interface, col.info.usage_page, col.info.usage, status
+        );
+    }
+    if !found {
+        println!("No matching HID collections found for 258A:010C.");
+    }
+    println!("No lighting or settings changed. HID paths and serial numbers omitted.");
+    Ok(())
+}
+
 fn apply_one(device: &mut impl RgbDevice, rgb: [u8; 3]) -> anyhow::Result<()> {
     // No calls to set_static() or ensure_per_key_mode(): both may write
     // non-volatile settings. A single volatile frame also avoids flooding HID.
@@ -107,11 +143,13 @@ fn apply_one(device: &mut impl RgbDevice, rgb: [u8; 3]) -> anyhow::Result<()> {
 fn run(
     args: &[String],
     check: impl FnOnce() -> anyhow::Result<()>,
+    diagnose: impl FnOnce() -> anyhow::Result<()>,
     apply: impl FnOnce([u8; 3]) -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
     match parse(args).map_err(anyhow::Error::msg)? {
         Action::Help => println!("{HELP}"),
         Action::Check => check()?,
+        Action::Diagnose => diagnose()?,
         Action::Preview([r, g, b]) => println!("#{r:02X}{g:02X}{b:02X} (preview only)"),
         Action::Apply(rgb) => apply(rgb)?,
     }
@@ -135,6 +173,7 @@ fn main() -> ExitCode {
             }
             Ok(())
         },
+        diagnose,
         |rgb| {
             apply_one(&mut find_wired()?, rgb)?;
             println!("One temporary frame sent. If the current effect repaints it, no settings will be forced.");
@@ -170,6 +209,7 @@ mod tests {
         ] {
             let result = run(
                 &args(&words),
+                || panic!("hardware accessed"),
                 || panic!("hardware accessed"),
                 |_| panic!("hardware accessed"),
             );
@@ -216,6 +256,7 @@ mod tests {
         run(
             &args(&["apply", "#FF8002", "50"]),
             || panic!("wrong action"),
+            || panic!("wrong action"),
             |rgb| apply_one(&mut fake, rgb),
         )
         .unwrap();
@@ -227,8 +268,25 @@ mod tests {
         run(
             &args(&["check"]),
             || Ok(()),
+            || panic!("wrong action"),
             |_| panic!("check sent lighting"),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn diagnose_never_applies_color() {
+        let called = std::cell::Cell::new(false);
+        run(
+            &args(&["diagnose"]),
+            || panic!("wrong action"),
+            || {
+                called.set(true);
+                Ok(())
+            },
+            |_| panic!("diagnose sent lighting"),
+        )
+        .unwrap();
+        assert!(called.get());
     }
 }

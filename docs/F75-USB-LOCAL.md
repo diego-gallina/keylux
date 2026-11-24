@@ -36,3 +36,17 @@ nativo, use `Fn + \` no F75.
 - Teste local sem hardware:
   `cargo test --locked -p aula-protocol --example f75_usb`.
   O teste físico em Windows ainda precisa confirmar o ID e a reação visual.
+
+## Se o Windows detecta o USB, mas o comando não confirma o F75
+
+Rode `f75_usb.exe diagnose`. Ele lista a interface e o código de uso de cada
+coleção HID do ID autorizado. O diagnóstico tenta a leitura inicial e acredita
+na identificação apenas após ler a assinatura de configuração esperada. Ele
+não envia uma cor, não grava configurações, não lê teclas e não imprime caminhos
+de dispositivo ou números de série. Feche outros apps de iluminação antes de
+comparar resultados; não desative proteções nem force um ID diferente.
+
+Se houver dois builds diagnósticos, compare `diagnose` no padrão C HIDAPI e
+no backend Windows nativo. Eles têm o mesmo código de aplicação e a mesma
+regra de confirmação; só muda a biblioteca de acesso. Não tente `apply`
+enquanto `check` não confirmar um único dispositivo.
