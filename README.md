@@ -4,13 +4,17 @@ Controle de luz para o AULA F75 no Windows, sem instalar driver extra nem trocar
 
 ## Abrir no Windows
 
-Extraia o ZIP inteiro e abra **Abrir Keylux.cmd**. Com o F75 no USB-C e a chave em modo com fio, clique em **Verificar USB**. A janela já abre pronta para ciano, 35%, 10 segundos. Escolha a cor na paleta, veja a prévia do teclado e clique em **Aplicar**.
+Extraia o ZIP e abra **Keylux-F75.exe**. Não precisa de PowerShell, instalador ou outro executável. Coloque o F75 no modo com fio, conecte pelo USB-C e clique em **Verificar USB**.
 
-**Salvar** guarda um perfil só no Windows; **Carregar** não envia nada ao teclado. **Parar** encerra o envio e **Apagar** manda um quadro preto. Não há macros, gravação no teclado, firmware ou inicialização automática na janela. Se o Windows bloquear o script, não desative a proteção: use o executável pelo terminal.
+A prévia mostra a cor no brilho escolhido. **Aplicar** vem com ciano, 35%, por 10 segundos; marque **Até eu parar** para manter o envio. **Salvar perfil** grava só neste PC, no mesmo arquivo usado pela janela anterior. Nada é gravado no teclado.
+
+A tela usa o controle de brilho direto do [Twinkle Tray](https://github.com/xanderfrangos/twinkle-tray) e a ideia de destacar o desenho do teclado do [Zumap](https://github.com/Keylab-dev/zumap) como referências visuais; não usa código ou imagens desses projetos.
+
+Para compilar no Windows: `cargo build --release --locked -p aula-protocol --example f75_panel`. A CLI e o script opcional continuam no código-fonte, não são necessários para abrir este painel.
 
 ## Testar ciano por 10 segundos
 
-Conecte em modo com fio. Na pasta do executável, rode no PowerShell:
+No painel, basta clicar em **Aplicar** com os valores iniciais. Se estiver usando o pacote separado da CLI, rode no PowerShell:
 
 ```powershell
 .\f75-usb-c-hidapi.exe hold 00FFFF 35 10
